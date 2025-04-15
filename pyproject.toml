@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "blocksparse_linear_fp16"
+version = "0.0.1"
+
+dependencies = [
+    "tilelang>=0.1.3",
+    "triton>=3.2.0",
+    "torch>=2.6.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,6 @@
+*.log
+.pkl_memorize_py3
+__pycache__
+*.egg-info
+.pkl_memorize_py3
+.pytest_cache
