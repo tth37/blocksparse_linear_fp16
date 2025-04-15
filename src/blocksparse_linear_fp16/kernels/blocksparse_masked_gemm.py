@@ -97,7 +97,7 @@ def blocksparse_masked_gemm_kernel(
 
 
 @functools.cache
-def get_tuned_kernel(M, N, K, block_M, block_K):
+def get_best_config(M, N, K, block_M, block_K):
     def get_configs():
         block_N = [64, 128, 256]
         num_stages = [1, 2, 3]
@@ -134,15 +134,17 @@ def get_tuned_kernel(M, N, K, block_M, block_K):
 
     result = autotuner.run()
     print("best config:", result.config)
-    best_config = result.config
-    save_best_config(M, N, K, block_M, block_K, best_config)    
-    return result.kernel
+    # best_config = result.config
+    # save_best_config(M, N, K, block_M, block_K, best_config)    
+    # return result.kernel
+    return result.config
 
 @functools.cache
-def get_cached_kernel(M, N, K, block_M, block_K):
+def get_tuned_kernel(M, N, K, block_M, block_K):
     best_config = load_best_config(M, N, K, block_M, block_K)
     if best_config is None:
-        return get_tuned_kernel(M, N, K, block_M, block_K)
+        best_config = get_best_config(M, N, K, block_M, block_K)
+        save_best_config(M, N, K, block_M, block_K, best_config)
     func = blocksparse_masked_gemm_kernel(
         M, N, K, block_M=block_M, block_N=best_config[0], block_K=block_K,
         num_stages=best_config[1], thread_num=best_config[2],
@@ -161,7 +163,7 @@ def blocksparse_masked_gemm(
     M, K = a.shape
     K, N = b.shape
 
-    return get_cached_kernel(M, N, K, block_m, block_k)(
+    return get_tuned_kernel(M, N, K, block_m, block_k)(
         a, b, block_mask
     )
 

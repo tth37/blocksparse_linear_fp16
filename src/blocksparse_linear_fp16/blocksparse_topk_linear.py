@@ -4,6 +4,7 @@ import math
 from .kernels import avg_magnitude, block_mask_topk, blocksparse_masked_gemm
 
 class BlockSparseTopKLinear(nn.Module):
+    thres: float
     def __init__(
         self,
         in_features: int,
@@ -21,7 +22,7 @@ class BlockSparseTopKLinear(nn.Module):
         self.topk_ratio = topk_ratio
         self.profile = profile
         self.weight = nn.Parameter(torch.randn((in_features, out_features), device=device, dtype=dtype))
-        self.thres = 0.0
+        self.thres = None
         nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
 
     def forward(self, x):

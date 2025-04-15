@@ -5,6 +5,7 @@ import math
 from .kernels import avg_magnitude_threshold, blocksparse_masked_gemm
 
 class BlockSparseThresLinear(nn.Module):
+    sparsity_ratio: float
     def __init__(
         self,
         in_features: int,
@@ -22,7 +23,7 @@ class BlockSparseThresLinear(nn.Module):
         self.thres = thres
         self.profile = profile
         self.weight = nn.Parameter(torch.randn((in_features, out_features), device=device, dtype=dtype))
-        self.sparsity_ratio = 0.0
+        self.sparsity_ratio = None
         nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
 
     def forward(self, x):
