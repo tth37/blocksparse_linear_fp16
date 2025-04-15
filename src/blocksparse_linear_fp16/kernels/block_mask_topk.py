@@ -3,8 +3,9 @@ import math
 
 
 def block_mask_topk(
-    block_avg_magnitude: torch.Tensor, topk_ratio: float
+    block_avg_magnitude: torch.Tensor, sparsity_ratio: float
 ) -> torch.Tensor:
+    topk_ratio = 1. - sparsity_ratio
     device = block_avg_magnitude.device
     num_elements = block_avg_magnitude.numel()
     k = min(max(0, math.ceil(num_elements * topk_ratio)), num_elements)

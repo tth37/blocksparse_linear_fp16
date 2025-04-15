@@ -2,6 +2,7 @@ import torch
 import tilelang
 import tilelang.language as T
 from tilelang.autotuner import AutoTuner
+import torch.nn.functional as F
 import functools
 import itertools
 import random
@@ -153,6 +154,50 @@ def get_tuned_kernel(M, N, K, block_M, block_K):
     kernel = tilelang.compile(func, out_idx=-1)
     return kernel
 
+def blocksparse_masked_gemm_torch(
+    a: torch.Tensor,
+    b: torch.Tensor,
+    block_mask: torch.Tensor, # Expected shape (num_blocks_m, num_blocks_k), dtype=torch.bool or integer
+    block_m: int,
+    block_k: int,
+) -> torch.Tensor:
+    M, K = a.shape
+    K, N = b.shape
+
+    num_blocks_m = (M + block_m - 1) // block_m
+    num_blocks_k = (K + block_k - 1) // block_k
+
+    M_pad = num_blocks_m * block_m
+    K_pad = num_blocks_k * block_k
+
+    pad_k = K_pad - K
+    pad_m = M_pad - M
+    
+    if pad_m > 0 or pad_k > 0:
+        # Pad K dim first (left/right is 0, pad_k), then M dim (top/bottom is 0, pad_m)
+        a_padded = F.pad(a, (0, pad_k, 0, pad_m), "constant", 0.0)
+    else:
+        a_padded = a # No padding needed for 'a'
+
+    block_mask_bool = block_mask.to(device=a.device, dtype=torch.bool)
+    
+    mask_m_expanded = block_mask_bool.repeat_interleave(block_m, dim=0) 
+    
+    full_mask = mask_m_expanded.repeat_interleave(block_k, dim=1) 
+    
+    masked_a_padded = a_padded * full_mask
+
+    masked_a_for_gemm = masked_a_padded[:M, :] # Shape: (M, K_pad)
+
+    if pad_k > 0:
+        b_padded = F.pad(b, (0, 0, 0, pad_k), "constant", 0.0) # Shape: (K_pad, N)
+    else:
+        b_padded = b # No padding needed for 'b'
+
+    result = torch.matmul(masked_a_for_gemm, b_padded)
+
+    return result
+
 def blocksparse_masked_gemm(
     a: torch.Tensor,
     b: torch.Tensor,
@@ -162,6 +207,11 @@ def blocksparse_masked_gemm(
 ) -> torch.Tensor:
     M, K = a.shape
     K, N = b.shape
+
+    if block_m < 16 or block_k < 16:
+        return blocksparse_masked_gemm_torch(
+            a, b, block_mask, block_m, block_k
+        )
 
     return get_tuned_kernel(M, N, K, block_m, block_k)(
         a, b, block_mask
@@ -192,25 +242,25 @@ def blocksparse_masked_gemm_ref(
     
     return masked_a @ b
 
-def test_blocksparse_masked_gemm(num_iterations=200):
-    for i in tqdm(range(num_iterations), desc="Testing blocksparse_masked_gemm"):
-        M = 35
-        K = 4096
-        N = 14336
-        block_m = random.choice([32])
-        block_k = random.choice([32])
-        num_blocks_m = (M + block_m - 1) // block_m
-        num_blocks_k = (K + block_k - 1) // block_k
+# def test_blocksparse_masked_gemm(num_iterations=200):
+#     for i in tqdm(range(num_iterations), desc="Testing blocksparse_masked_gemm"):
+#         M = 358
+#         K = 4096
+#         N = 14336
+#         block_m = random.choice([32])
+#         block_k = random.choice([32])
+#         num_blocks_m = (M + block_m - 1) // block_m
+#         num_blocks_k = (K + block_k - 1) // block_k
 
-        a = torch.randn((M, K), device="cuda", dtype=torch.float16)
-        b = torch.randn((K, N), device="cuda", dtype=torch.float16)
-        block_mask = torch.randint(0, 2, (num_blocks_m, num_blocks_k), device="cuda", dtype=torch.bool)
+#         a = torch.randn((M, K), device="cuda", dtype=torch.float16)
+#         b = torch.randn((K, N), device="cuda", dtype=torch.float16)
+#         block_mask = torch.randint(0, 2, (num_blocks_m, num_blocks_k), device="cuda", dtype=torch.bool)
 
-        result = blocksparse_masked_gemm(a, b, block_mask, block_m, block_k)
-        result_ref = blocksparse_masked_gemm_ref(a, b, block_mask, block_m, block_k)
+#         result = blocksparse_masked_gemm_torch(a, b, block_mask, block_m, block_k)
+#         result_ref = blocksparse_masked_gemm_ref(a, b, block_mask, block_m, block_k)
 
-        torch.testing.assert_close(result, result_ref)
+#         torch.testing.assert_close(result, result_ref)
 
-    print("blocksparse_masked_gemm test passed!")
+#     print("blocksparse_masked_gemm test passed!")
 
-# test_blocksparse_masked_gemm(1)
+# test_blocksparse_masked_gemm(20)

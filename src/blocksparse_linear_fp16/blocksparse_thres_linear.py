@@ -17,17 +17,22 @@ class BlockSparseThresLinear(nn.Module):
         dtype=None,
     ):
         super().__init__()
+        assert dtype == torch.float16, "Only float16 is supported"
         self.in_features = in_features
         self.out_features = out_features
         self.block_m, self.block_k = block_size
         self.thres = thres
         self.profile = profile
         self.weight = nn.Parameter(torch.randn((in_features, out_features), device=device, dtype=dtype))
+        self.bias = nn.Parameter(torch.empty(out_features, device=device, dtype=dtype))
         self.sparsity_ratio = None
         nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
 
     def forward(self, x):
-        bsz, hidden_size = x.shape
+        bsz, seq, hidden_size = x.shape
+        x = x.view(bsz * seq, hidden_size)
+        if seq != 1:
+            return (x @ self.weight).view(bsz, seq, self.out_features) + self.bias
         block_mask = avg_magnitude_threshold(
             x, self.block_m, self.block_k, self.thres
         )
@@ -39,7 +44,8 @@ class BlockSparseThresLinear(nn.Module):
             x, self.weight, block_mask,
             self.block_m, self.block_k
         )
-        return x
+        x = x.view(bsz, seq, self.out_features)
+        return x + self.bias
     
 
 # _block_sparse_linear = BlockSparseLinear(4096, 14336*2, (32, 32), 0.8, "cuda", torch.float16)
