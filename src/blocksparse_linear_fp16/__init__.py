@@ -1,3 +1,7 @@
-from .blocksparse_linear_fp16 import Layer
+from .blocksparse_thres_linear import BlockSparseThresLinear
+from .blocksparse_topk_linear import BlockSparseTopKLinear
 
-__all__ = ["Layer"]
+__all__ = [
+    "BlockSparseThresLinear",
+    "BlockSparseTopKLinear",
+]

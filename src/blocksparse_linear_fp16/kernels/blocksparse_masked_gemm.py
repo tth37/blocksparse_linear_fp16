@@ -1,16 +1,65 @@
 import torch
-import torch.nn as nn
-import triton
-import triton.language as tl
 import tilelang
 import tilelang.language as T
 from tilelang.autotuner import AutoTuner
-import math
 import functools
 import itertools
 import random
 from tqdm import tqdm
+import os
+import json
 
+def get_gpu_device_name():
+    try:
+        device_id = torch.cuda.current_device()
+        return torch.cuda.get_device_name(device_id).replace(" ", "_")
+    except Exception as e:
+        print(f"Warning: Could not get GPU device name: {e}. Using 'Unknown_GPU'.")
+        return "Unknown_GPU"
+    
+CACHE_DIR = os.path.expanduser("~/.cache/blocksparse_linear_fp16/")
+
+def save_best_config(M, N, K, block_M, block_K, best_config):
+    gpu_name = get_gpu_device_name()
+    config_key = f"M{M}_N{N}_K{K}_blockM{block_M}_blockK{block_K}"
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    config_file_path = os.path.join(CACHE_DIR, f"{gpu_name}.json")
+
+    configs = {}
+    if os.path.exists(config_file_path):
+        try:
+            with open(config_file_path, 'r') as f:
+                configs = json.load(f)
+        except Exception as e:
+            configs = {}
+
+    configs[config_key] = list(best_config) 
+
+    try:
+        with open(config_file_path, 'w') as f:
+            json.dump(configs, f, indent=4)
+    except IOError as e:
+        print(f"Warning: Could not write cache file {config_file_path}. Error: {e}")
+
+def load_best_config(M, N, K, block_M, block_K):
+    gpu_name = get_gpu_device_name()
+    config_key = f"M{M}_N{N}_K{K}_blockM{block_M}_blockK{block_K}"
+    
+    config_file_path = os.path.join(CACHE_DIR, f"{gpu_name}.json")
+    
+    if not os.path.exists(config_file_path):
+        return None
+        
+    try:
+        with open(config_file_path, 'r') as f:
+            configs = json.load(f)
+            config_list = configs.get(config_key)
+            if config_list:
+                return tuple(config_list) 
+            else:
+                return None
+    except Exception as e:
+        return None
 
 def blocksparse_masked_gemm_kernel(
     M, N, K, block_M, block_N, block_K,
@@ -83,10 +132,24 @@ def get_tuned_kernel(M, N, K, block_M, block_K):
         target="auto"
     )
 
-    # return autotuner.run().kernel
     result = autotuner.run()
     print("best config:", result.config)
+    best_config = result.config
+    save_best_config(M, N, K, block_M, block_K, best_config)    
     return result.kernel
+
+@functools.cache
+def get_cached_kernel(M, N, K, block_M, block_K):
+    best_config = load_best_config(M, N, K, block_M, block_K)
+    if best_config is None:
+        return get_tuned_kernel(M, N, K, block_M, block_K)
+    func = blocksparse_masked_gemm_kernel(
+        M, N, K, block_M=block_M, block_N=best_config[0], block_K=block_K,
+        num_stages=best_config[1], thread_num=best_config[2],
+        enable_rasteration=best_config[3]
+    )
+    kernel = tilelang.compile(func, out_idx=-1)
+    return kernel
 
 def blocksparse_masked_gemm(
     a: torch.Tensor,
@@ -98,7 +161,7 @@ def blocksparse_masked_gemm(
     M, K = a.shape
     K, N = b.shape
 
-    return get_tuned_kernel(M, N, K, block_m, block_k)(
+    return get_cached_kernel(M, N, K, block_m, block_k)(
         a, b, block_mask
     )
 
@@ -147,3 +210,5 @@ def test_blocksparse_masked_gemm(num_iterations=200):
         torch.testing.assert_close(result, result_ref)
 
     print("blocksparse_masked_gemm test passed!")
+
+# test_blocksparse_masked_gemm(1)
