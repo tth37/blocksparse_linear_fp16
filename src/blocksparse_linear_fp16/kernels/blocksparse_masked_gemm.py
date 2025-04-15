@@ -204,11 +204,12 @@ def blocksparse_masked_gemm(
     block_mask: torch.Tensor,
     block_m: int,
     block_k: int,
+    enforce_torch: bool = False,
 ) -> torch.Tensor:
     M, K = a.shape
     K, N = b.shape
 
-    if block_m < 16 or block_k < 16:
+    if (block_m < 16 or block_k < 16) or enforce_torch:
         return blocksparse_masked_gemm_torch(
             a, b, block_mask, block_m, block_k
         )

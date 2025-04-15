@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import math
+from torchmetrics import MeanMetric
 from .kernels import avg_magnitude, block_mask_topk, blocksparse_masked_gemm
 
 class BlockSparseTopKLinear(nn.Module):
@@ -25,6 +26,7 @@ class BlockSparseTopKLinear(nn.Module):
         self.weight = nn.Parameter(torch.randn((in_features, out_features), device=device, dtype=dtype))
         self.bias = nn.Parameter(torch.zeros(out_features, device=device, dtype=dtype))
         self.thres = None
+        self.thres_metric = MeanMetric()
         nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
 
     def forward(self, x):
@@ -39,19 +41,19 @@ class BlockSparseTopKLinear(nn.Module):
             block_activation, self.sparsity_ratio
         )
         if self.profile:
-            # check if all blocks are active
             total_blocks = block_mask.numel()
             active_blocks = block_mask.sum().item()
             if active_blocks == total_blocks:
                 self.thres = float("inf")
             else:
-                # assert False, "FUCK"
                 self.thres = torch.max(
                     block_activation[~block_mask]
                 ).item()
+            self.thres_metric.update(self.thres, weight=total_blocks)
         x = blocksparse_masked_gemm(
             x, self.weight, block_mask,
-            self.block_m, self.block_k
+            self.block_m, self.block_k,
+            enforce_torch=True
         )
         x = x.view(bsz, seq, self.out_features)
         return x + self.bias
