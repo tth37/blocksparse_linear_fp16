@@ -1,8 +1,24 @@
 import torch
 import torch.nn as nn
 import math
-from torchmetrics import MeanMetric
 from .kernels import avg_magnitude, block_mask_topk, blocksparse_masked_gemm
+
+class MeanMetric:
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.total = 0
+        self.count = 0
+
+    def update(self, value, weight=1):
+        self.total += value * weight
+        self.count += weight
+
+    def compute(self):
+        if self.count == 0:
+            return 0
+        return self.total / self.count
 
 class BlockSparseTopKLinear(nn.Module):
     thres: float
@@ -53,7 +69,7 @@ class BlockSparseTopKLinear(nn.Module):
         x = blocksparse_masked_gemm(
             x, self.weight, block_mask,
             self.block_m, self.block_k,
-            enforce_torch=True
+            backend="torch"
         )
         x = x.view(bsz, seq, self.out_features)
         return x + self.bias

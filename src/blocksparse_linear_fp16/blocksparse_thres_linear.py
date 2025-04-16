@@ -24,7 +24,7 @@ class BlockSparseThresLinear(nn.Module):
         self.thres = thres
         self.profile = profile
         self.weight = nn.Parameter(torch.randn((in_features, out_features), device=device, dtype=dtype))
-        self.bias = nn.Parameter(torch.empty(out_features, device=device, dtype=dtype))
+        self.bias = nn.Parameter(torch.zeros(out_features, device=device, dtype=dtype))
         self.sparsity_ratio = None
         nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
 
