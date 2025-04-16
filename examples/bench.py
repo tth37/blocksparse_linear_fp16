@@ -124,12 +124,12 @@ for config in CONFIGS:
     sparse_time, dense_time = bench_config(config)
     results.append({
         "Configuration": config["title"],
-        "BlockSparse (ms)": f"{sparse_time:.3f}",
-        "Dense (ms)": f"{dense_time:.3f}",
+        "BlockSparse (ms)": f"{sparse_time:.4f}",
+        "Dense (ms)": f"{dense_time:.4f}",
         "Speedup": f"{dense_time/sparse_time:.2f}x"
     })
 
 # Print results table
-headers = ["Configuration", "BlockSparse (ms)", "Dense (ms)", "Speedup"]
+headers = [f"Configuration blk=({BLOCK_SIZE[0]}x{BLOCK_SIZE[1]}) bsz={BATCH_SIZE}", "BlockSparse (ms)", "Dense (ms)", "Speedup"]
 table = tabulate([list(r.values()) for r in results], headers=headers, tablefmt="grid")
 print(table)
