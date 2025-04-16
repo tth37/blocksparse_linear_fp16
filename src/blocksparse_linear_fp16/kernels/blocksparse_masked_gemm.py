@@ -9,6 +9,7 @@ import random
 from tqdm import tqdm
 import os
 import json
+from typing import Union, Literal
 from .blocksparse_masked_gemm_tilelang import blocksparse_masked_gemm_tilelang
 from .blocksparse_masked_gemm_torch import blocksparse_masked_gemm_torch
 
