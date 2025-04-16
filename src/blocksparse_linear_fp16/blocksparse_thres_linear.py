@@ -3,6 +3,7 @@ import torch.nn as nn
 import math
 
 from .kernels import avg_magnitude_threshold, blocksparse_masked_gemm
+from .blocksparse_topk_linear import BlockSparseTopKLinear
 
 class BlockSparseThresLinear(nn.Module):
     sparsity_ratio: float
@@ -27,6 +28,25 @@ class BlockSparseThresLinear(nn.Module):
         self.bias = nn.Parameter(torch.zeros(out_features, device=device, dtype=dtype))
         self.sparsity_ratio = None
         nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+
+    @staticmethod
+    def from_topk_linear(
+        blocksparse_topk_linear: BlockSparseTopKLinear,
+        profile: bool = False,
+    ) -> "BlockSparseThresLinear":
+        assert not blocksparse_topk_linear.thres_metric.empty(), "TopK thres_metric should not be empty"
+        blocksparse_thres_linear = BlockSparseThresLinear(
+            blocksparse_topk_linear.in_features,
+            blocksparse_topk_linear.out_features,
+            (blocksparse_topk_linear.block_m, blocksparse_topk_linear.block_k),
+            blocksparse_topk_linear.thres_metric.compute(),
+            profile=profile,
+            device=blocksparse_topk_linear.weight.device,
+            dtype=blocksparse_topk_linear.weight.dtype
+        )
+        blocksparse_thres_linear.weight.data = blocksparse_topk_linear.weight.data.clone()
+        blocksparse_thres_linear.bias.data = blocksparse_topk_linear.bias.data.clone()
+        return blocksparse_thres_linear
 
     def forward(self, x):
         bsz, seq, hidden_size = x.shape

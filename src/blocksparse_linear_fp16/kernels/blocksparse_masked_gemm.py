@@ -20,7 +20,7 @@ def blocksparse_masked_gemm(
     block_mask: torch.Tensor,
     block_m: int,
     block_k: int,
-    backend: Union[Literal["auto"], Literal["torch"], Literal["tilelang"]],
+    backend: Union[Literal["auto"], Literal["torch"], Literal["tilelang"]] = "auto",
 ) -> torch.Tensor:
     M, K = a.shape
     K, N = b.shape

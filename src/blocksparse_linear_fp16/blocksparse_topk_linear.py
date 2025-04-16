@@ -19,6 +19,9 @@ class MeanMetric:
         if self.count == 0:
             return 0
         return self.total / self.count
+    
+    def empty(self) -> bool:
+        return self.count == 0
 
 class BlockSparseTopKLinear(nn.Module):
     thres: float
@@ -73,6 +76,10 @@ class BlockSparseTopKLinear(nn.Module):
         )
         x = x.view(bsz, seq, self.out_features)
         return x + self.bias
+    
+    def run_dummy_inputs(self, dummy_inputs: list[torch.Tensor]):
+        for input_tensor in dummy_inputs:
+            self(input_tensor)
 # _block_sparse_linear = BlockSparseLinear(4096, 14336*2, (32, 32), 0.8, "cuda", torch.float16)
 # block_sparse_linear = torch.compile(_block_sparse_linear)
 # _dense_linear = nn.Linear(4096, 14336*2).cuda().half()
